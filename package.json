@@ -16,6 +16,8 @@
     "node": ">=18"
   },
   "dependencies": {
+    "@fontsource/bungee": "^5.2.7",
+    "@fontsource/rajdhani": "^5.2.7",
     "@mediapipe/tasks-vision": "^0.10.14",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"

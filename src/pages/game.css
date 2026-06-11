@@ -1,7 +1,7 @@
 /* Clone Dance game styles, ported from the legacy clone_dance.html and
    scoped under .game-root. */
 
-@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;500;700&display=swap');
+/* Fonts are self-hosted via @fontsource and imported in main.tsx */
 
 .game-root {
     --neon-pink: #ff0080;
@@ -20,6 +20,7 @@
     inset: 0;
     z-index: 60;
     font-family: 'Rajdhani', sans-serif;
+    font-size: 1.05rem;
     background: linear-gradient(135deg, #0a0a0f 0%, #1a0a2e 100%);
     color: white;
     overflow: hidden;
@@ -46,7 +47,7 @@
 }
 
 .game-root button {
-    font-family: 'Orbitron', sans-serif;
+    font-family: 'Bungee', sans-serif;
     padding: 12px 30px;
     border: none;
     border-radius: 8px;
@@ -107,10 +108,14 @@
 }
 
 .setup-content h2 {
-    font-family: 'Orbitron', sans-serif;
-    font-size: 3rem;
-    color: var(--neon-pink);
-    text-shadow: 0 0 20px rgba(255, 0, 128, 0.6);
+    font-family: 'Bungee', sans-serif;
+    font-size: 2.3rem;
+    margin-bottom: 6px;
+    background: linear-gradient(45deg, var(--neon-pink), var(--neon-blue));
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    filter: drop-shadow(0 0 18px rgba(255, 0, 128, 0.55));
 }
 
 .setup-exit {
@@ -183,7 +188,7 @@
 .difficulty-config-card > summary {
     cursor: pointer;
     list-style: none;
-    font-family: 'Orbitron', sans-serif;
+    font-family: 'Bungee', sans-serif;
     font-size: 0.85rem;
     color: var(--neon-green);
     letter-spacing: 0.08em;
@@ -328,8 +333,17 @@
 
 .score-display {
     display: flex;
-    gap: 30px;
-    align-items: center;
+    gap: 14px;
+    align-items: stretch;
+}
+
+.score-display > div {
+    background: rgba(10, 10, 15, 0.6);
+    border: 1px solid rgba(0, 212, 255, 0.35);
+    border-radius: 12px;
+    padding: 8px 16px;
+    backdrop-filter: blur(6px);
+    box-shadow: 0 0 18px rgba(0, 212, 255, 0.12);
 }
 
 .stat-label {
@@ -341,9 +355,8 @@
 }
 
 .stat-value {
-    font-family: 'Orbitron', sans-serif;
-    font-size: 1.5rem;
-    font-weight: 700;
+    font-family: 'Bungee', sans-serif;
+    font-size: 1.3rem;
     color: var(--neon-green);
     text-shadow: 0 0 15px rgba(0, 255, 136, 0.8);
 }
@@ -414,11 +427,10 @@
     top: 20px;
     right: 20px;
     background: var(--combo-bg);
-    padding: 15px 25px;
-    border-radius: 10px;
-    font-family: 'Orbitron', sans-serif;
-    font-size: 1.5rem;
-    font-weight: 900;
+    padding: 14px 22px;
+    border-radius: 12px;
+    font-family: 'Bungee', sans-serif;
+    font-size: 1.3rem;
     display: none;
     animation: comboPulse 0.5s ease-in-out infinite;
     box-shadow: 0 0 30px var(--combo-shadow);
@@ -439,9 +451,8 @@
     top: 46%;
     left: 50%;
     transform: translate(-50%, -50%);
-    font-family: 'Orbitron', sans-serif;
-    font-size: clamp(3rem, 8vw, 6rem);
-    font-weight: 900;
+    font-family: 'Bungee', sans-serif;
+    font-size: clamp(2.2rem, 6.5vw, 4.5rem);
     letter-spacing: 0.12em;
     text-transform: uppercase;
     opacity: 0;
@@ -489,9 +500,8 @@
 }
 
 .countdown-value {
-    font-family: 'Orbitron', sans-serif;
-    font-size: clamp(6rem, 20vw, 16rem);
-    font-weight: 900;
+    font-family: 'Bungee', sans-serif;
+    font-size: clamp(5rem, 17vw, 13rem);
     line-height: 1;
     color: var(--neon-green);
     text-shadow: 0 0 36px rgba(0, 255, 136, 0.95), 0 0 80px rgba(0, 212, 255, 0.55);
@@ -527,7 +537,7 @@
     border: 2px solid var(--neon-blue);
     border-radius: 8px;
     color: #fff;
-    font-family: 'Orbitron', sans-serif;
+    font-family: 'Bungee', sans-serif;
     text-shadow: 0 0 12px rgba(0, 212, 255, 0.6);
     max-width: 70%;
     font-size: 16px;
@@ -546,7 +556,7 @@
     flex-direction: column;
     z-index: 90;
     cursor: pointer;
-    font-family: 'Orbitron', sans-serif;
+    font-family: 'Bungee', sans-serif;
     font-size: 2rem;
     color: var(--neon-blue);
     text-align: center;
@@ -590,7 +600,7 @@
 }
 
 .calibration-content h2 {
-    font-family: 'Orbitron', sans-serif;
+    font-family: 'Bungee', sans-serif;
     font-size: 1.5rem;
     margin-bottom: 15px;
     color: var(--neon-pink);
@@ -682,7 +692,7 @@
 
 .frame-time-display {
     color: var(--neon-green);
-    font-family: 'Orbitron', sans-serif;
+    font-family: 'Bungee', sans-serif;
     font-size: 0.8rem;
     white-space: nowrap;
 }
@@ -744,7 +754,7 @@
 }
 
 .stats-card h2 {
-    font-family: 'Orbitron', sans-serif;
+    font-family: 'Bungee', sans-serif;
     font-size: 2.2rem;
     margin-bottom: 22px;
     color: var(--neon-pink);
@@ -767,7 +777,7 @@
 
 .stats-value {
     margin-top: 6px;
-    font-family: 'Orbitron', sans-serif;
+    font-family: 'Bungee', sans-serif;
     font-size: 2rem;
     font-weight: 700;
     color: var(--neon-green);
