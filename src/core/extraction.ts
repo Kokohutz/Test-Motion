@@ -99,8 +99,6 @@ export async function extractChoreography(
     let cancelled = false;
     const startedAtMs = performance.now();
 
-    landmarker.detectForVideo(video, 0); // warm-up so per-frame timing is steadier
-
     for (let frameIdx = 0; frameIdx < totalFrames; frameIdx++) {
         if (shouldCancel?.()) {
             cancelled = true;

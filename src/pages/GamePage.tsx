@@ -313,8 +313,11 @@ export default function GamePage() {
                 </div>
             </div>
 
-            {isRunning && snapshot.phase === 'calibration' && (
-                <div className="calibration-screen">
+            {/* Always mounted: the engine binds these video/canvas elements at start */}
+            <div
+                className="calibration-screen"
+                style={{ display: isRunning && snapshot.phase === 'calibration' ? 'flex' : 'none' }}
+            >
                     <div className="calibration-content">
                         <h2>Initial Calibration. Match the pose</h2>
 
@@ -352,7 +355,6 @@ export default function GamePage() {
                         </div>
                     </div>
                 </div>
-            )}
 
             {isRunning && snapshot.phase === 'ended' && snapshot.stats && (
                 <div className="game-stats-screen">
