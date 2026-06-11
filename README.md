@@ -14,11 +14,27 @@ Copyright / takedown notice — If this repository on GitHub contains material y
 
 ## Usage
 
-### Create a choreography (video to JSON)
+### Create a choreography (video to JSON) — in the browser, no Python
+
+1. Start a static server in this folder:
+```bash
+   npx serve
+```
+
+2. Open `extractor.html` (e.g. `http://localhost:3000/extractor.html`) in Chrome Desktop.
+
+3. Drop your dance video, pick a model (lite/full/heavy) and extraction FPS, and click **Extract Choreography**. When it finishes you can download:
+   - **Clone-Dance JSON** — works directly with the game and the visualizer below.
+   - **Beatmap JSON** — the new step-based format (beat detection and step labeling coming next).
+
+<details>
+<summary>Legacy: Python extractor (deprecated)</summary>
+
 ```bash
 pip install -r requirements.txt
 python process_video.py --video FILE.mp4 --name "NAME"
 ```
+</details>
 
 ### Visualize the choreography (check it's OK)
 
