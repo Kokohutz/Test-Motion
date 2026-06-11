@@ -11,88 +11,54 @@ Demo:
 
 Copyright / takedown notice — If this repository on GitHub contains material you own, please contact me directly or open an issue with your claim. I will cooperate and remove the content immediately upon request.
 
+The app is a **Vite + React + TypeScript** single-page application (extractor and visualizer), with the game itself still served as a legacy static page until it is migrated. See [ARCHITECTURE.md](ARCHITECTURE.md) for the full picture. No Python anywhere.
 
 ## Usage
 
 ### Run with Docker (nginx)
 
-Tests run automatically during the image build — if any test fails, the build aborts and nothing is served.
+The image build runs the Vitest suite and the TypeScript type-check first — if either fails, the build aborts and nothing is served.
 
 ```bash
 docker compose up --build
 ```
 
-Then open http://localhost:8080 (serves `clone_dance.html`; the extractor is at `/extractor.html`, the visualizer at `/visualizer.html`).
+Then open http://localhost:8080:
+
+- `/` — React app: **Extractor** (`#/extractor`) and **Visualizer** (`#/visualizer`)
+- `/clone_dance.html` — the game (legacy page, plays choreographies produced by the extractor)
 
 > Note: the webcam requires a secure context. `http://localhost` works; if you host it elsewhere, you'll need HTTPS.
 
-### Run the tests directly
+### Develop locally
 
 ```bash
-npm test   # Node >= 18, no dependencies (uses node:test)
+npm install
+npm run dev      # Vite dev server with HMR
+npm test         # Vitest suite
+npm run build    # test + type-check + production bundle in dist/
 ```
 
-Covers the choreography-building logic (`choreo_core.js`), `config.json` validation, HTML/JS wiring (script references, element ids, model and sound assets), and the shipped choreography JSONs.
+### Create a choreography (video to JSON) — in the browser
 
-### Create a choreography (video to JSON) — in the browser, no Python
+Open the **Extractor** page, drop your dance video, pick a model (lite/full/heavy) and extraction FPS, and click **Extract Choreography**. When it finishes you can download:
 
-1. Start a static server in this folder:
-```bash
-   npx serve
-```
-
-2. Open `extractor.html` (e.g. `http://localhost:3000/extractor.html`) in Chrome Desktop.
-
-3. Drop your dance video, pick a model (lite/full/heavy) and extraction FPS, and click **Extract Choreography**. When it finishes you can download:
-   - **Clone-Dance JSON** — works directly with the game and the visualizer below.
-   - **Beatmap JSON** — the new step-based format (beat detection and step labeling coming next).
-
-<details>
-<summary>Legacy: Python extractor (deprecated)</summary>
-
-```bash
-pip install -r requirements.txt
-python process_video.py --video FILE.mp4 --name "NAME"
-```
-</details>
+- **Clone-Dance JSON** — works directly with the game and the visualizer.
+- **Beatmap JSON** — the new step-based format (beat detection and step labeling coming next).
 
 ### Visualize the choreography (check it's OK)
 
-Open in Chrome Desktop (only tested here):
-https://algomlop.github.io/Clone-Dance/visualizer.html
-
-OR
-
-1. Start the HTTP server:
-```bash
-   python -m http.server
-```
-
-2. Open in Chrome Desktop (only tested here):
-```
-   http://localhost:8000/visualizer.html
-```
+Open the **Visualizer** page, load the video plus its JSON, and play it back with the skeleton and angle overlay.
 
 ### Play the game
 
-Open in Chrome Desktop (only tested here):
-https://algomlop.github.io/Clone-Dance/clone_dance.html
-
-OR
-
-1. Start the HTTP server:
-```bash
-   python -m http.server
-```
-
-2. Open in Chrome Desktop (only tested here):
-```
-   http://localhost:8000/clone_dance.html
-```
+Open `/clone_dance.html`, select the reference video and its choreography JSON, calibrate, and dance.
 
 ## TODO
 
 - [ ] Make an enjoyable game
+- [ ] Migrate the game page (clone_dance.html/js) into the React app
+- [ ] Beat detection + step segmentation (beatmap M2)
 - [ ] Improve visual and sound effects
 - [ ] Fine-tuning of the detection and scoring strategy (position vs angle). I think it's better only angles. Skip or simplify calibration if only angles are used.
 - [ ] Fine-tuning of the difficulty levels
@@ -105,4 +71,3 @@ OR
 
 
 Made with love and AI
-

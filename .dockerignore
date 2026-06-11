@@ -2,16 +2,20 @@
 # not served (players upload their own videos in the browser).
 *.mp4
 
-# Legacy Python pipeline (replaced by extractor.html)
+# Legacy Python pipeline (replaced by the in-browser extractor)
 *.py
 requirements.txt
 __pycache__
+
+# Build artifacts and dependencies (recreated inside the image)
+node_modules
+dist
+public/mediapipe-wasm
 
 # Tooling / VCS
 .git
 .gitignore
 .vscode
-node_modules
 Dockerfile
 docker-compose.yml
 .dockerignore
