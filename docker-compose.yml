@@ -1,6 +1,30 @@
+# Dev:  docker compose --profile dev up    -> http://localhost:5173 (hot reload)
+# Prod: docker compose --profile prod up   -> http://localhost:8080 (nginx)
+#
+# The prod image runs the full test suite + type-check during the build;
+# a failure aborts the build and nothing is served.
+
 services:
-  web:
-    build: .
+  dev:
+    profiles: ["dev"]
+    build:
+      context: .
+      target: dev
+    container_name: clone-dance-dev
+    ports:
+      - "5173:5173"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    environment:
+      # Reliable file watching across Docker Desktop (macOS/Windows) mounts
+      - VITE_USE_POLLING=1
+
+  prod:
+    profiles: ["prod"]
+    build:
+      context: .
+      target: prod
     container_name: clone-dance
     ports:
       - "8080:80"

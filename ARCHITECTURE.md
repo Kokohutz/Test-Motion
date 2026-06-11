@@ -2,162 +2,176 @@
 
 Clone Dance is a fully client-side dance game: a video of someone dancing is
 turned into a "choreography" (a pose time series), and the player dances along
-in front of their webcam while the game scores the match. There is no backend
-and no Python — everything runs in the browser, served as static files.
+in front of their webcam while the game scores the match. There is no backend,
+no Python, and no standalone HTML pages — the whole product is one React SPA
+(Vite + TypeScript) served as static files. `index.html` is only Vite's shell;
+a test enforces that `public/` contains no other HTML.
 
 ## High-level layout
 
 ```
-                    ┌──────────────────────────────────────────────┐
-                    │            React SPA (Vite + TS)             │
-                    │  src/pages/ExtractorPage   VisualizerPage    │
-                    │  src/hooks/usePoseLandmarker  useAppConfig   │
-                    └───────────────┬──────────────────────────────┘
-                                    │ imports
-                    ┌───────────────▼──────────────────────────────┐
-                    │        Core domain layer (src/core/)         │
-                    │  choreography.ts  extraction.ts  drawing.ts  │
-                    │  config.ts        types.ts                   │
-                    │  (no React; choreography.ts also no DOM)     │
-                    └───────────────┬──────────────────────────────┘
-                                    │ shared contract: config.json +
-                                    │ choreography JSON schema
-                    ┌───────────────▼──────────────────────────────┐
-                    │       Legacy game page (public/)             │
-                    │  clone_dance.html + clone_dance.js           │
-                    │  + vendored MediaPipe legacy Pose + p5.js    │
-                    └──────────────────────────────────────────────┘
+                 ┌────────────────────────────────────────────────┐
+                 │              React SPA (Vite + TS)              │
+                 │   src/pages: GamePage  ExtractorPage  Visualizer│
+                 │   src/hooks: usePoseLandmarker  useAppConfig    │
+                 └──────────────┬─────────────────┬───────────────┘
+                                │ snapshots/cmds   │ imports
+                 ┌──────────────▼──────────┐      │
+                 │  Game runtime (src/game) │      │
+                 │  engine.ts  effects.ts   │      │
+                 │  sounds.ts (stateful,    │      │
+                 │  framework-free)         │      │
+                 └──────────────┬──────────┘      │
+                                │ imports          │
+                 ┌──────────────▼──────────────────▼───────────────┐
+                 │           Core domain layer (src/core/)          │
+                 │  choreography.ts  comparison.ts  scoring.ts      │
+                 │  gameConfig.ts  extraction.ts  drawing.ts        │
+                 │  config.ts  types.ts   (pure logic, unit-tested) │
+                 └──────────────────────────────────────────────────┘
 ```
+
+Both pipelines — offline extraction and the live game — run the **same**
+`@mediapipe/tasks-vision` PoseLandmarker (VIDEO mode), so reference and player
+skeletons are directly comparable.
 
 ## Layers
 
 ### 1. Core domain layer — `src/core/`
 
-Framework-free TypeScript. This is where all the dance-specific logic lives,
-and it is the part covered by unit tests.
+Framework-free TypeScript; everything pure is unit-tested in Node (83 tests).
 
-| Module | Responsibility | Browser APIs? |
-|---|---|---|
-| `types.ts` | All shared domain types: landmarks, pose frames, the legacy choreography schema, the step-based beatmap schema, the config.json shape. | none |
-| `choreography.ts` | Pure functions: 2D joint-angle math, landmark serialization, visibility gating, building the legacy choreography JSON and the beatmap JSON, dominant-joint detection, mirroring. Deterministic — fully unit-tested in Node. | none |
-| `extraction.ts` | The video→pose-series engine: seeks an `HTMLVideoElement` frame-by-frame at a fixed FPS (deterministic, machine-speed independent) and runs MediaPipe `PoseLandmarker` in VIDEO mode. Reports through callbacks (`onProgress`, `onFrame`, `shouldCancel`) so it has no opinion about UI. | video element, MediaPipe |
-| `drawing.ts` | Canvas skeleton/angle-label rendering shared by the extractor preview and the visualizer. | canvas 2D |
-| `config.ts` | Fetches and validates `public/config.json` (memoized promise). | fetch |
+| Module | Responsibility |
+|---|---|
+| `types.ts` | Domain types: landmarks, pose frames, choreography + beatmap schemas, config shape. |
+| `choreography.ts` | Angle math, landmark serialization, visibility gating, choreography/beatmap builders, mirroring, dominant joints. |
+| `comparison.ts` | Live-game math: left/right mirroring, torso-based normalization (calibration), angle/position comparison with injectable EMA smoothing state, windowed best-pose search (binary search + quick compare) for timing forgiveness. |
+| `scoring.ts` | Scoring/combo state machine as a pure reducer returning events (comboUp/comboMax), GOOD/GREAT/PERFECT tier resolution, no-pose warning state machine. |
+| `gameConfig.ts` | Merges `config.json`'s game section + difficulty presets (+ per-session tuning overrides) into one typed, defaulted `GameConfig`. |
+| `extraction.ts` | Deterministic video→pose-series engine (seek per frame, callback-driven). |
+| `drawing.ts` | Canvas skeleton/angle-label rendering shared by extractor preview and visualizer. |
+| `config.ts` | Fetches + validates `public/config.json` (memoized). |
 
-The rule for this layer: **anything that can be a pure function is one**, and
-React never reaches around it to touch MediaPipe or canvas directly.
+### 2. Game runtime — `src/game/`
 
-### 2. Hooks — `src/hooks/`
+Stateful but framework-free; React drives it with commands and renders the
+snapshots it emits.
 
-The bridge between React's lifecycle and stateful browser/ML resources:
+- `engine.ts` — owns the whole game loop: the webcam/test-video pose loop
+  (`detectForVideo` per rAF with monotonic timestamps), the calibration phase
+  (match the reference pose, hold it N frames, derive torso normalization),
+  the 3-2-1 countdown, reference-video playback sync, per-frame comparison →
+  scoring → feedback/sound/effects triggers, debug skeleton drawing, sizing.
+  It exposes commands (`togglePlayPause`, `reset`, `startCalibration`,
+  `skipCalibration`, `retry`, `setCalibrationTime`, …) and emits one
+  `GameSnapshot` object the UI renders from.
+- `effects.ts` — canvas-2D additive particle trail that follows the reference
+  dancer's most active joint while the player scores well (replaces the old
+  p5.js/WebGL shader, so no p5/CDN dependency).
+- `sounds.ts` — reward SFX bank (initialized inside a user gesture).
 
-- `usePoseLandmarker` — lazily creates the MediaPipe `PoseLandmarker` for the
-  requested model complexity (lite/full/heavy), caches it across runs,
-  falls back from GPU to CPU delegate, and closes it on unmount.
-- `useAppConfig` — loads `config.json` once and exposes `{config, error}`;
-  pages render fallback defaults until it arrives.
+### 3. Hooks — `src/hooks/`
 
-### 3. Pages — `src/pages/` + `src/App.tsx`
+`usePoseLandmarker` (lazy create per model complexity, GPU→CPU fallback,
+close on unmount) and `useAppConfig` (shared `config.json`).
 
-Thin React components: form state, progress display, canvas refs, download
-buttons. `App.tsx` does hash-based routing (`#/extractor`, `#/visualizer`) —
-no router dependency. The render loop in the visualizer keeps mutable refs for
-playback state so the `requestAnimationFrame` loop doesn't re-subscribe on
-every React state change.
+### 4. Pages — `src/pages/` + `App.tsx`
 
-### 4. Legacy game — `public/clone_dance.html` + `clone_dance.js`
-
-The playable game (calibration, scoring, combos, effects) still runs as a
-self-contained static page, served untouched from `public/`. It is a
-**strangler-fig migration**: the React app and the legacy page interoperate
-through two shared contracts —
-
-1. `public/config.json` — single source of truth for landmarks, angle joints,
-   difficulty presets; read by both worlds (and validated by tests, including
-   a drift check against the TypeScript fallbacks).
-2. The **choreography JSON schema** — the extractor produces exactly the
-   format the game consumes.
-
-Migrating it into React is the next big step; until then nothing about it
-changed, so it cannot have regressed.
+Hash routing without a router dependency: `#/game` (default), `#/extractor`,
+`#/visualizer`. `GamePage` renders the setup screen (files, webcam/test-video
+input, difficulty presets with a per-field tuning editor, mirror/VFX/debug
+toggles), then the HUD, calibration overlay with a frame scrubber, countdown,
+feedback popups, and the end-of-song stats card — all driven by engine
+snapshots. Visual intensity (popup scale/duration, combo pulse) flows from the
+difficulty preset into CSS custom properties.
 
 ## Data flow
 
 ```
-reference.mp4 ──► ExtractorPage ──► extraction.ts (seek + PoseLandmarker VIDEO mode)
-                                        │ poses: landmarks + 8 joint angles/frame
-                                        ▼
-                       choreography.ts builders
-                        │                      │
-            legacy choreography JSON      beatmap JSON (steps/angles,
-                        │                  bpm pending M2 beat detection)
-                        ▼
-        /clone_dance.html (play)  +  VisualizerPage (inspect)
+reference.mp4 ─► ExtractorPage ─► extraction.ts (PoseLandmarker VIDEO mode)
+                                     │  poses: landmarks + 8 joint angles
+                                     ▼
+                      choreography.ts builders
+                       │                      │
+           choreography JSON             beatmap JSON (steps/angles;
+                       │                  bpm pending M2 beat detection)
+                       ▼
+   GamePage (#/game): webcam ─► engine ─► comparison ─► scoring ─► HUD/FX
+                       │
+              VisualizerPage (inspect overlay)
 ```
 
-Angles, not raw coordinates, are the comparison currency (scale/translation
-invariant); each frame stores both angles (for scoring) and landmarks (for
-ghost-overlay rendering later).
+Angles are the comparison currency (scale/translation invariant); landmarks
+are kept per frame for skeleton/ghost rendering.
 
-## Build & deployment pipeline
+## Dev & prod systems
 
 ```
-npm run build
-  └─ prebuild: vitest run (49 tests)  ← gate
-               scripts/copy-wasm.mjs  ← vendors MediaPipe wasm into public/
-  └─ tsc --noEmit                     ← gate
-  └─ vite build → dist/               ← SPA bundle + everything in public/
+Dev  (hot reload):  npm run dev            → http://localhost:5173
+                    docker compose --profile dev up
+                       (bind mount + polling watch → HMR inside Docker)
+
+Prod (nginx):       docker compose --profile prod up --build
+                       → http://localhost:8080
 ```
 
-- **Docker**: stage 1 (`node:22-alpine`) runs `npm ci && npm run build`; the
-  nginx stage copies only `dist/`. A test or type failure aborts the image.
-- **nginx**: gzip for the multi-MB choreography JSONs; immutable caching for
-  Vite's content-hashed `/assets/`, the `.task` models and the wasm runtime;
-  `no-cache` for JSON configs.
-- The MediaPipe wasm runtime is copied from `node_modules` at build time
-  (`public/mediapipe-wasm/`, gitignored), so the served site is fully
-  self-contained — no CDN at runtime for the React app — and the wasm version
-  can never drift from the npm package. (The legacy game page still loads its
-  older MediaPipe Pose solution from `public/cdn/` as before.)
+One multi-stage `Dockerfile` serves both: `base` (npm ci) → `dev` (Vite dev
+server, used by the dev compose profile) and `build` (vitest + tsc + vite
+build) → `prod` (nginx serving `dist/`). The prod image cannot assemble if a
+test or type error exists. nginx config: gzip for multi-MB choreography JSONs,
+immutable caching for hashed `/assets/`, `.task` models and the wasm runtime.
+
+The MediaPipe wasm runtime is copied from `node_modules` into
+`public/mediapipe-wasm/` before dev/build (`scripts/copy-wasm.mjs`,
+gitignored), so the served app needs no CDN at runtime and the wasm can never
+drift from the npm package version.
+
+## Git workflow (CI)
+
+`.github/workflows/ci.yml`:
+
+- **test-and-build** — on every PR and push to main: `npm ci` →
+  `npm run build` (Vitest suite → `tsc --noEmit` → Vite bundle), uploads
+  `dist/` as an artifact.
+- **docker-image** — on main: builds the production nginx image (tests run
+  again inside the build stage) with GitHub Actions layer caching. Add a
+  registry login/push step there to publish the image.
 
 ## Testing strategy
 
-All tests run in Node (no browser needed), which is what allows them to gate
-the Docker build:
+All tests run in Node — no browser — which is what lets them gate the build:
 
-- `tests/choreography.test.ts` — unit tests for the pure logic: angle math,
-  visibility gating, both output schemas, mirroring, dominant joints.
-- `tests/config.test.ts` — validates `config.json` (sections, landmark/joint
-  references, difficulty presets, threshold ordering) and that the TypeScript
-  fallbacks haven't drifted from it.
-- `tests/site.test.ts` — static wiring for the legacy page: every script it
-  references exists, every element id `clone_dance.js` looks up exists in the
-  HTML, sound/model assets are present, shipped choreographies match the
-  schema.
+- `tests/choreography.test.ts` — extraction math + output schemas.
+- `tests/comparison.test.ts` — mirroring, normalization (torso mapping),
+  angle/position comparison incl. EMA smoothing, windowed best-pose search.
+- `tests/scoring.test.ts` — points/combo state machine, combo events,
+  freeze-on-no-pose, seek handling, feedback tiers, warning delays.
+- `tests/gameConfig.test.ts` — difficulty preset resolution + overrides.
+- `tests/config.test.ts` — `config.json` validation + drift check against
+  the TypeScript fallbacks.
+- `tests/site.test.ts` — served assets exist; **no `.html` files in
+  `public/`**; shipped choreographies match the schema.
 
-What is *not* covered: anything requiring a real camera, GPU, or MediaPipe
-inference — that stays manual for now (a Playwright smoke test is the natural
-next addition).
+Not covered: real camera/GPU/MediaPipe inference — that remains manual (a
+Playwright smoke test is the natural next addition).
 
 ## Directory map
 
 ```
-├── index.html              React entry (Vite)
+├── index.html              Vite shell (the only HTML file)
 ├── src/
 │   ├── main.tsx, App.tsx   bootstrap + hash routing
-│   ├── core/               framework-free domain logic (tested)
-│   ├── hooks/              React ↔ MediaPipe/config lifecycle bridges
-│   ├── pages/              ExtractorPage, VisualizerPage
-│   └── styles.css
-├── public/                 served verbatim; legacy game + shared assets
-│   ├── clone_dance.html/.js, config_loader.js, cdn/, visual_effects/
-│   ├── config.json         shared config contract
-│   ├── pose_landmarker_{lite,full,heavy}.task
-│   ├── choreographies/     sample extracted choreographies
-│   └── mediapipe-wasm/     (generated, gitignored)
-├── tests/                  Vitest (Node environment)
-├── scripts/copy-wasm.mjs   vendors the wasm runtime at build time
-├── Dockerfile              test+build stage → nginx stage
-├── docker-compose.yml      localhost:8080
-└── nginx.conf
+│   ├── core/               pure domain logic (unit-tested)
+│   ├── game/               game engine, effects, sounds (framework-free)
+│   ├── hooks/              React ↔ MediaPipe/config bridges
+│   ├── pages/              GamePage, ExtractorPage, VisualizerPage
+│   └── styles.css, pages/game.css
+├── public/                 config.json, pose models, choreographies, sfx,
+│                           mediapipe-wasm/ (generated)
+├── tests/                  Vitest (Node)
+├── scripts/copy-wasm.mjs
+├── Dockerfile              base → dev | build → prod (nginx)
+├── docker-compose.yml      profiles: dev (5173, HMR) / prod (8080)
+├── nginx.conf
+└── .github/workflows/ci.yml
 ```

@@ -11,53 +11,48 @@ Demo:
 
 Copyright / takedown notice — If this repository on GitHub contains material you own, please contact me directly or open an issue with your claim. I will cooperate and remove the content immediately upon request.
 
-The app is a **Vite + React + TypeScript** single-page application (extractor and visualizer), with the game itself still served as a legacy static page until it is migrated. See [ARCHITECTURE.md](ARCHITECTURE.md) for the full picture. No Python anywhere.
+The app is a **Vite + React + TypeScript** single-page application covering the game, the extractor and the visualizer. See [ARCHITECTURE.md](ARCHITECTURE.md) for the full picture. No Python, no standalone HTML pages.
 
 ## Usage
 
-### Run with Docker (nginx)
-
-The image build runs the Vitest suite and the TypeScript type-check first — if either fails, the build aborts and nothing is served.
-
-```bash
-docker compose up --build
-```
-
-Then open http://localhost:8080:
-
-- `/` — React app: **Extractor** (`#/extractor`) and **Visualizer** (`#/visualizer`)
-- `/clone_dance.html` — the game (legacy page, plays choreographies produced by the extractor)
-
-> Note: the webcam requires a secure context. `http://localhost` works; if you host it elsewhere, you'll need HTTPS.
-
-### Develop locally
+### Dev (hot reload)
 
 ```bash
 npm install
-npm run dev      # Vite dev server with HMR
-npm test         # Vitest suite
-npm run build    # test + type-check + production bundle in dist/
+npm run dev          # Vite dev server with HMR -> http://localhost:5173
 ```
 
-### Create a choreography (video to JSON) — in the browser
+or inside Docker (bind-mounted, still hot-reloads on edit):
 
-Open the **Extractor** page, drop your dance video, pick a model (lite/full/heavy) and extraction FPS, and click **Extract Choreography**. When it finishes you can download:
+```bash
+docker compose --profile dev up
+```
 
-- **Clone-Dance JSON** — works directly with the game and the visualizer.
-- **Beatmap JSON** — the new step-based format (beat detection and step labeling coming next).
+### Prod (nginx)
 
-### Visualize the choreography (check it's OK)
+The image build runs the Vitest suite and the TypeScript type-check first — if either fails, the build aborts and nothing is served. The same checks run in CI (`.github/workflows/ci.yml`) on every PR and push to main.
 
-Open the **Visualizer** page, load the video plus its JSON, and play it back with the skeleton and angle overlay.
+```bash
+docker compose --profile prod up --build   # -> http://localhost:8080
+```
 
-### Play the game
+The app is a single React SPA (no standalone HTML pages):
 
-Open `/clone_dance.html`, select the reference video and its choreography JSON, calibrate, and dance.
+- `#/game` (default) — play: pick a reference video + choreography JSON, calibrate, dance
+- `#/extractor` — drop a dance video, get the choreography JSON (in-browser, no Python)
+- `#/visualizer` — overlay an extracted choreography on its video to check it
+
+> Note: the webcam requires a secure context. `http://localhost` works; if you host it elsewhere, you'll need HTTPS.
+
+### Tests
+
+```bash
+npm test   # Vitest, 83 tests, all run in Node (no browser needed)
+```
 
 ## TODO
 
 - [ ] Make an enjoyable game
-- [ ] Migrate the game page (clone_dance.html/js) into the React app
 - [ ] Beat detection + step segmentation (beatmap M2)
 - [ ] Improve visual and sound effects
 - [ ] Fine-tuning of the detection and scoring strategy (position vs angle). I think it's better only angles. Skip or simplify calibration if only angles are used.
