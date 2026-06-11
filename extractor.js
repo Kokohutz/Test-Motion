@@ -12,40 +12,21 @@
  */
 
 import { FilesetResolver, PoseLandmarker } from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/+esm';
+import {
+    DEFAULT_ACTIVE_LANDMARKS,
+    DEFAULT_ANGLE_JOINTS,
+    DEFAULT_POSE_CONNECTIONS,
+    VISIBILITY_THRESHOLD,
+    round,
+    serializeLandmarks,
+    calculateAngles,
+    buildLegacyChoreography,
+    buildBeatmap,
+    sanitizeFileName
+} from './choreo_core.js';
 
 const MEDIAPIPE_WASM_URL = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm';
 
-// Fallbacks if config.json cannot be loaded (kept in sync with config.json)
-const DEFAULT_ACTIVE_LANDMARKS = [0, 11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32];
-const DEFAULT_ANGLE_JOINTS = {
-    left_shoulder: [12, 11, 13],
-    right_shoulder: [11, 12, 14],
-    left_elbow: [11, 13, 15],
-    right_elbow: [12, 14, 16],
-    left_knee: [23, 25, 27],
-    right_knee: [24, 26, 28],
-    left_hip: [24, 23, 25],
-    right_hip: [23, 24, 26]
-};
-const DEFAULT_POSE_CONNECTIONS = [
-    [11, 12], [11, 13], [13, 15], [12, 14], [14, 16],
-    [11, 23], [12, 24], [23, 24], [23, 25], [25, 27],
-    [24, 26], [26, 28], [27, 29], [27, 31], [28, 30], [28, 32]
-];
-
-// Beatmap schema uses short camelCase angle names
-const BEATMAP_ANGLE_NAMES = {
-    left_shoulder: 'lShoulder',
-    right_shoulder: 'rShoulder',
-    left_elbow: 'lElbow',
-    right_elbow: 'rElbow',
-    left_hip: 'lHip',
-    right_hip: 'rHip',
-    left_knee: 'lKnee',
-    right_knee: 'rKnee'
-};
-
-const VISIBILITY_THRESHOLD = 0.5;
 const SEEK_TIMEOUT_MS = 8000;
 
 const state = {
@@ -183,62 +164,6 @@ function seekTo(video, timeSec) {
     });
 }
 
-function computeAngle2D(p1, vertex, p2) {
-    const v1x = p1.x - vertex.x;
-    const v1y = p1.y - vertex.y;
-    const v2x = p2.x - vertex.x;
-    const v2y = p2.y - vertex.y;
-
-    const dot = v1x * v2x + v1y * v2y;
-    const mag1 = Math.hypot(v1x, v1y);
-    const mag2 = Math.hypot(v2x, v2y);
-    const cosAngle = Math.max(-1, Math.min(1, dot / (mag1 * mag2 + 1e-8)));
-    return Math.acos(cosAngle) * (180 / Math.PI);
-}
-
-function serializeLandmarks(rawLandmarks) {
-    const landmarks = [];
-    for (const id of state.activeLandmarks) {
-        const lm = rawLandmarks[id];
-        if (!lm) continue;
-        landmarks.push({
-            id,
-            x: round(lm.x, 4),
-            y: round(lm.y, 4),
-            z: round(lm.z, 4),
-            visibility: round(lm.visibility ?? 1, 4)
-        });
-    }
-    return landmarks;
-}
-
-function calculateAngles(landmarks) {
-    const byId = {};
-    for (const lm of landmarks) byId[lm.id] = lm;
-
-    const angles = {};
-    for (const [angleName, [p1Id, vertexId, p2Id]] of Object.entries(state.angleJoints)) {
-        const p1 = byId[p1Id];
-        const vertex = byId[vertexId];
-        const p2 = byId[p2Id];
-
-        if (!p1 || !vertex || !p2 ||
-            p1.visibility < VISIBILITY_THRESHOLD ||
-            vertex.visibility < VISIBILITY_THRESHOLD ||
-            p2.visibility < VISIBILITY_THRESHOLD) {
-            angles[angleName] = null;
-            continue;
-        }
-        angles[angleName] = round(computeAngle2D(p1, vertex, p2), 2);
-    }
-    return angles;
-}
-
-function round(value, decimals) {
-    const factor = 10 ** decimals;
-    return Math.round(value * factor) / factor;
-}
-
 async function startExtraction() {
     const file = els.videoFile.files[0];
     if (!file || state.isRunning) return;
@@ -296,12 +221,12 @@ async function startExtraction() {
             drawPreview(ctx, video, rawLandmarks);
 
             if (rawLandmarks && rawLandmarks.length > 0) {
-                const landmarks = serializeLandmarks(rawLandmarks);
+                const landmarks = serializeLandmarks(rawLandmarks, state.activeLandmarks);
                 poses.push({
                     timestamp: round(timeSec, 3),
                     frame: frameIdx,
                     landmarks,
-                    angles: calculateAngles(landmarks)
+                    angles: calculateAngles(landmarks, state.angleJoints)
                 });
             } else {
                 failedCount++;
@@ -385,94 +310,19 @@ function formatSec(seconds) {
 }
 
 function buildResult({ name, fileName, poses, failedCount, duration, targetFps, complexity, resolution }) {
-    const fpsEffective = duration > 0 ? poses.length / duration : 0;
-
-    const legacy = {
-        metadata: {
-            name,
-            source_url: '',
-            duration,
-            fps: targetFps,
-            resolution,
-            total_frames: poses.length + failedCount,
-            processed_at: new Date().toISOString(),
-            processing_params: {
-                model_complexity: complexity,
-                skip_frames: 0,
-                active_landmarks: state.activeLandmarks,
-                mirror_mode: false,
-                extractor: 'browser'
-            }
-        },
+    const legacy = buildLegacyChoreography({
+        name,
         poses,
-        stats: {
-            total_poses: poses.length,
-            fps_effective: round(fpsEffective, 2),
-            duration
-        }
-    };
-
+        failedCount,
+        duration,
+        targetFps,
+        complexity,
+        resolution,
+        activeLandmarks: state.activeLandmarks
+    });
     const beatmap = buildBeatmap({ name, fileName, poses, duration, targetFps });
 
     return { name, legacy, beatmap, failedCount };
-}
-
-function buildBeatmap({ name, fileName, poses, duration, targetFps }) {
-    const frames = poses.map((pose) => {
-        const angles = {};
-        for (const [legacyName, shortName] of Object.entries(BEATMAP_ANGLE_NAMES)) {
-            if (legacyName in pose.angles) {
-                angles[shortName] = pose.angles[legacyName];
-            }
-        }
-        return {
-            tMs: Math.round(pose.timestamp * 1000),
-            angles,
-            landmarks: pose.landmarks
-        };
-    });
-
-    return {
-        title: name,
-        sourceFile: fileName,
-        bpm: null,           // M2: beat detection
-        beatOffsetMs: null,  // M2: beat detection
-        mirrored: false,
-        fps: targetFps,
-        durationMs: Math.round(duration * 1000),
-        steps: [
-            {
-                id: 1,
-                label: 'full routine', // M2: split into per-beat steps with auto-labels
-                startMs: 0,
-                endMs: Math.round(duration * 1000),
-                frames,
-                dominantJoints: computeDominantJoints(frames)
-            }
-        ]
-    };
-}
-
-function computeDominantJoints(frames, topN = 2) {
-    const totals = {};
-    let previous = null;
-
-    for (const frame of frames) {
-        if (previous) {
-            for (const [jointName, angle] of Object.entries(frame.angles)) {
-                const prevAngle = previous.angles[jointName];
-                if (Number.isFinite(angle) && Number.isFinite(prevAngle)) {
-                    totals[jointName] = (totals[jointName] || 0) + Math.abs(angle - prevAngle);
-                }
-            }
-        }
-        previous = frame;
-    }
-
-    return Object.entries(totals)
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, topN)
-        .map(([jointName]) => jointName);
 }
 
 function showResults(result, wasCancelled) {
@@ -494,11 +344,6 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
-}
-
-function sanitizeFileName(name) {
-    const cleaned = name.toLowerCase().replace(/[\s-]+/g, '_').replace(/[^a-z0-9_]/g, '');
-    return cleaned || 'choreography';
 }
 
 function downloadResult(kind) {

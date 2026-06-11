@@ -1,0 +1,14 @@
+{
+  "name": "clone-dance",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Browser-based dance game: drop a video, extract the choreography, play with your webcam.",
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "start": "npx serve ."
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

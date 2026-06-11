@@ -14,6 +14,26 @@ Copyright / takedown notice — If this repository on GitHub contains material y
 
 ## Usage
 
+### Run with Docker (nginx)
+
+Tests run automatically during the image build — if any test fails, the build aborts and nothing is served.
+
+```bash
+docker compose up --build
+```
+
+Then open http://localhost:8080 (serves `clone_dance.html`; the extractor is at `/extractor.html`, the visualizer at `/visualizer.html`).
+
+> Note: the webcam requires a secure context. `http://localhost` works; if you host it elsewhere, you'll need HTTPS.
+
+### Run the tests directly
+
+```bash
+npm test   # Node >= 18, no dependencies (uses node:test)
+```
+
+Covers the choreography-building logic (`choreo_core.js`), `config.json` validation, HTML/JS wiring (script references, element ids, model and sound assets), and the shipped choreography JSONs.
+
 ### Create a choreography (video to JSON) — in the browser, no Python
 
 1. Start a static server in this folder:

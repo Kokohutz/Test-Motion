@@ -1,0 +1,17 @@
+# Keep the build context small: sample videos alone are ~150 MB and are
+# not served (players upload their own videos in the browser).
+*.mp4
+
+# Legacy Python pipeline (replaced by extractor.html)
+*.py
+requirements.txt
+__pycache__
+
+# Tooling / VCS
+.git
+.gitignore
+.vscode
+node_modules
+Dockerfile
+docker-compose.yml
+.dockerignore
