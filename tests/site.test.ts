@@ -1,66 +1,37 @@
 /**
- * Static wiring checks: the legacy game page (served from public/) still
- * references scripts and element ids that exist, the pose models and sound
- * assets are present, and the shipped choreographies match the schema.
- * These run before the Vite build / Docker image, so a broken page never
- * ships.
+ * Static asset checks: everything the SPA needs at runtime is served from
+ * public/, and no standalone HTML pages remain (the React app is the only
+ * entry point — index.html is Vite's shell). These run before the build,
+ * so a broken deployment never ships.
  */
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, test } from 'vitest';
 
 const ROOT = join(__dirname, '..');
 const PUBLIC = join(ROOT, 'public');
 
-function read(file: string): string {
-    return readFileSync(join(PUBLIC, file), 'utf8');
+function listFilesRecursive(dir: string): string[] {
+    const out: string[] = [];
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const full = join(dir, entry.name);
+        if (entry.isDirectory()) out.push(...listFilesRecursive(full));
+        else out.push(full);
+    }
+    return out;
 }
 
-function localScriptSrcs(html: string): string[] {
-    return [...html.matchAll(/<script[^>]+src="([^"]+)"/g)]
-        .map((m) => m[1])
-        .filter((src) => !/^https?:\/\//.test(src));
-}
-
-describe('legacy game page (public/clone_dance.html)', () => {
-    const html = read('clone_dance.html');
-    const js = read('clone_dance.js');
-
-    test('every local <script src> exists in public/', () => {
-        const srcs = localScriptSrcs(html);
-        expect(srcs.length).toBeGreaterThan(0);
-        for (const src of srcs) {
-            expect(existsSync(join(PUBLIC, src.replace(/^\.\//, ''))), `missing script: ${src}`).toBe(true);
-        }
+describe('no standalone HTML', () => {
+    test('public/ contains no .html files (everything runs through the React app)', () => {
+        const htmlFiles = listFilesRecursive(PUBLIC).filter((f) => f.endsWith('.html'));
+        expect(htmlFiles).toEqual([]);
     });
 
-    test('config_loader.js loads before clone_dance.js', () => {
-        const srcs = localScriptSrcs(html);
-        const loaderIdx = srcs.indexOf('config_loader.js');
-        const mainIdx = srcs.findIndex((s) => s.endsWith('clone_dance.js'));
-        expect(loaderIdx).toBeGreaterThanOrEqual(0);
-        expect(mainIdx).toBeGreaterThan(loaderIdx);
-    });
-
-    test('every element id the game looks up exists in the page', () => {
-        // Ids created at runtime by the script itself, not present in HTML
-        const runtimeCreated = new Set(['angleDebugOverlay']);
-        const ids = [...new Set([...js.matchAll(/getElementById\('([^']+)'\)/g)].map((m) => m[1]))];
-        expect(ids.length).toBeGreaterThan(10);
-
-        for (const id of ids) {
-            if (runtimeCreated.has(id)) continue;
-            expect(html.includes(`id="${id}"`), `clone_dance.js looks up #${id} but the page has no such element`).toBe(true);
-        }
-    });
-
-    test('reward sound files referenced by the game exist', () => {
-        const sfx = [...js.matchAll(/'(assets\/sfx\/[^']+)'/g)].map((m) => m[1]);
-        expect(sfx.length).toBeGreaterThan(0);
-        for (const file of sfx) {
-            expect(existsSync(join(PUBLIC, file)), `missing sound file: ${file}`).toBe(true);
-        }
+    test('index.html is only the Vite shell (no app scripts beyond the entry)', () => {
+        const html = readFileSync(join(ROOT, 'index.html'), 'utf8');
+        const scripts = [...html.matchAll(/<script[^>]+src="([^"]+)"/g)].map((m) => m[1]);
+        expect(scripts).toEqual(['/src/main.tsx']);
     });
 });
 
@@ -75,12 +46,21 @@ describe('served assets', () => {
     test('config.json is served from public/', () => {
         expect(existsSync(join(PUBLIC, 'config.json'))).toBe(true);
     });
+
+    test('every sound file referenced by the game exists', () => {
+        const source = readFileSync(join(ROOT, 'src', 'game', 'sounds.ts'), 'utf8');
+        const sfx = [...source.matchAll(/'(\/assets\/sfx\/[^']+)'/g)].map((m) => m[1]);
+        expect(sfx.length).toBeGreaterThan(0);
+        for (const file of sfx) {
+            expect(existsSync(join(PUBLIC, file)), `missing sound file: ${file}`).toBe(true);
+        }
+    });
 });
 
 describe('shipped choreographies', () => {
     for (const file of ['choreographies/maniac.json', 'choreographies/adore.json']) {
         test(`${file} parses and matches the choreography schema`, () => {
-            const data = JSON.parse(read(file));
+            const data = JSON.parse(readFileSync(join(PUBLIC, file), 'utf8'));
             expect(data.metadata?.name).toBeTruthy();
             expect(Array.isArray(data.poses) && data.poses.length > 0).toBe(true);
             expect(data.stats?.total_poses).toBe(data.poses.length);
